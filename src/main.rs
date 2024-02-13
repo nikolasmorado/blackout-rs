@@ -7,9 +7,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     print!("Connected to server ");
     let screen = &conn.setup().roots[screen_num];
 
-    let resources: randr::GetScreenResourcesReply = randr::get_screen_resources(&conn, screen.root)?.reply()?;
+    let resources: randr::GetScreenResourcesReply = randr::get_screen_resources(&conn, screen.root)?.reply()?.clone();
     
-    let mut crtc_gammas = Vec::new();
+    let mut crtc_gammas: randr::GetCrtcGammaReply = Vec::new();
 
     for crtc in resources.crtcs.clone() {
         let gamma: randr::GetCrtcGammaReply = randr::get_crtc_gamma(&conn, crtc)?.reply()?;
@@ -35,8 +35,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let index = resources.crtcs.clone().iter().position(|&x| x == crtc).unwrap();
         let gamma = &crtc_gammas[index];
         let _ = randr::set_crtc_gamma(&conn, crtc, &gamma.red, &gamma.green, &gamma.blue);
-
-
     }
 
     drop(conn);
