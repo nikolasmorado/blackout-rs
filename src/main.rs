@@ -9,7 +9,7 @@ struct Cli {
     #[arg(short, long)]
     list: bool,
 
-    #[arg(short, long, num_args = 3, value_delimiter = ' ')]
+    #[arg(short, long, value_delimiter = ' ')]
     screens: Vec<u32>,
 
     #[arg(short, long, default_value = "60")]
@@ -94,10 +94,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::sleep(std::time::Duration::from_secs(args.duration));
 
     for b in backup_crtcs {
-        if !args.screens.contains(&b.0) {
-            continue;
-        }
-
         restore(&conn, b.0, &b.1)?;
     }
 
