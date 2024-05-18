@@ -1,49 +1,54 @@
 use x11rb::connection::Connection;
-use x11rb::protocol::randr;
-use tokio::task;
-use futures::future::join_all;
+use x11rb::protocol::randr::{get_crtc_gamma, get_crtc_info, get_screen_resources, set_crtc_gamma};
 
-const SLEEP_TIME: u64 = 1;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (conn, _screen_num) = x11rb::connect(None).unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (conn, screen_num) = x11rb::connect(None).unwrap();
+    let screen = &conn.setup().roots[screen_num];
 
-    println!();
-    println!("Connected to server ");
+    let sr = get_screen_resources(&conn, screen.root)?.reply()?;
 
-    conn.setup().roots.iter().for_each(|screen| {
-        println!("Screen: {}, {}x{}", screen.root, screen.width_in_pixels, screen.height_in_pixels);
+    let mut backup_crtcs = Vec::new();
 
-        let resources: randr::GetScreenResourcesReply =
-            randr::get_screen_resources(&conn, screen.root).unwrap()
-                .reply().unwrap();
-        
-        resources.crtcs.iter().for_each(|crtc| {
-            println!("Found crtc {}", crtc);
-            let gamma: randr::GetCrtcGammaReply = randr::get_crtc_gamma(&conn, *crtc).unwrap().reply().unwrap();
-            let gamma_size = gamma.red.len();
-            let black_gamma = vec![0; gamma_size];
-            let _set_result = randr::set_crtc_gamma(&conn, *crtc, &black_gamma, &black_gamma, &black_gamma);
-            while let Ok(updated_gamma) = randr::get_crtc_gamma(&conn, *crtc) {
-                let get_reply: randr::GetCrtcGammaReply = updated_gamma.reply().unwrap();
-                if get_reply.red == black_gamma
-                    && get_reply.green == black_gamma
-                    && get_reply.blue == black_gamma
-                {
-                    break;
-                }
+    for c in sr.crtcs {
+        let crtc = get_crtc_info(&conn, c, 0)?.reply()?;
+
+        if crtc.width == 0 || crtc.height == 0 {
+            continue;
+        }
+
+        println!("CRTC {:0?}: {:1?}x {:2?}y", c, crtc.x, crtc.y);
+        println!("::: {:0?}x {:1?}y", crtc.width, crtc.height);
+
+        let gamma = get_crtc_gamma(&conn, c)?.reply()?;
+
+        backup_crtcs.push((c, gamma.clone()));
+
+        for _ in 0..gamma.red.len() {
+            let mut red = gamma.red.clone();
+            let mut green = gamma.green.clone();
+            let mut blue = gamma.blue.clone();
+
+            for j in 0..red.len() {
+                red[j] = 0;
+                green[j] = 0;
+                blue[j] = 0;
             }
-            std::thread::sleep(std::time::Duration::from_secs(SLEEP_TIME));
-            let _set_result = randr::set_crtc_gamma(&conn, *crtc, &gamma.red, &gamma.green, &gamma.blue);
-        });
 
-    });
+            set_crtc_gamma(&conn, c, &red, &green, &blue)?;
+        }
+    }
+    
+    std::thread::sleep(std::time::Duration::from_secs(2));
 
+    for b in backup_crtcs {
+        println!("Setting gamma for CRTC: {:?}", b.0);
+        set_crtc_gamma(&conn, b.0, &b.1.red, &b.1.green, &b.1.blue)?;
+    }
 
-    println!();
+    let _f = conn.flush();
 
-    drop(conn);
-
-    Ok(())
+    loop {
+        println!("Event: {:?}", conn.wait_for_event()?);
+    }
 }
