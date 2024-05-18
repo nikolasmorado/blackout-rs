@@ -9,7 +9,7 @@ struct Cli {
     #[arg(short, long)]
     list: bool,
 
-    #[arg(short, long)]
+    #[arg(short, long, num_args = 3, value_delimiter = ' ')]
     screens: Vec<u32>,
 
     #[arg(short, long, default_value = "60")]
